@@ -162,21 +162,17 @@ if df_raw is not None and not df_raw.empty:
     chart_json = bar_chart.to_json()
     df_fallas = df_filtered[df_filtered['Estatus'] == 'No Cumple']
 
-    # Seleccionamos y reordenamos columnas para que la Operación sea visible
-    # Usamos get para evitar errores si alguna columna no existe en ese nivel
+    # Columnas para la tabla centrada
     cols_importantes = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'],
                         cols_nombres['operacion'], 'Categoría', 'Estatus']
-
-    # Filtrar solo las que realmente están presentes en el DataFrame filtrado
     cols_tabla = [c for c in cols_importantes if c in df_fallas.columns]
 
-    # Generar el HTML de la tabla con clases de Bootstrap para centrar
     tabla_html = df_fallas[cols_tabla].to_html(
         classes='table table-dark table-striped table-hover text-center',
-        index=False,
-        justify='center'
+        index=False, justify='center'
     )
 
+    # REPORTE CON KPIs Y GRÁFICO INTERACTIVO
     reporte_html = f"""
     <html>
     <head>
@@ -186,35 +182,60 @@ if df_raw is not None and not df_raw.empty:
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             body {{ background-color: #0e1117; color: white; font-family: 'Inter', sans-serif; padding: 30px; }}
-            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 25px; margin-bottom: 20px; }}
-            h1, h2 {{ color: #3b82f6; text-align: center; font-weight: bold; }}
-            p.header-info {{ text-align: center; color: #94a3b8; margin-bottom: 30px; }}
-            .table {{ color: white; margin-left: auto; margin-right: auto; width: 90% !important; }}
-            .table th {{ background-color: #3b82f6 !important; color: white !important; text-align: center !important; border: none; }}
-            .table td {{ vertical-align: middle; text-align: center !important; border-color: #2d3748; }}
-            #vg-tooltip-element {{ background-color: #333 !important; color: white !important; border: 1px solid #3b82f6 !important; }}
+            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 20px; margin-bottom: 20px; text-align: center; }}
+            .kpi-card {{ border-left: 5px solid #3b82f6; }}
+            .kpi-value {{ font-size: 2rem; font-weight: bold; color: #3b82f6; }}
+            .kpi-label {{ font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; }}
+            h1, h2 {{ color: #3b82f6; text-align: center; font-weight: bold; margin-bottom: 20px; }}
+            .table {{ color: white; margin: 0 auto; width: 95% !important; }}
+            .table th {{ background-color: #3b82f6 !important; color: white !important; text-align: center !important; }}
+            #vg-tooltip-element {{ background-color: #333 !important; color: white !important; border: 1px solid #3b82f6 !important; font-size: 12px !important; }}
         </style>
     </head>
     <body>
         <div class="container-fluid">
-            <h1>🚀 Reporte LPA Elite</h1>
-            <p class="header-info">Nivel: {page} | Master Engineer: Erik Armenta<br>Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <h1>🚀 Reporte Gerencial LPA</h1>
+            <p style="text-align: center; color: #94a3b8;">Nivel: {page} | Developed by Master Engineer Erik Armenta | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="kpi-label">Cumplimiento Global</div>
+                        <div class="kpi-value">{cumplimiento:.1f}%</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="kpi-label">Auditorías Totales</div>
+                        <div class="kpi-value">{len(df_raw)}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="kpi-label">Puntos Evaluados</div>
+                        <div class="kpi-value">{len(df_filtered)}</div>
+                    </div>
+                </div>
+            </div>
 
             <div class="card">
-                <h2>📊 Gráfica de Cumplimiento</h2>
+                <h2>📊 Análisis de Tendencias</h2>
                 <div id="vis" style="width: 100%;"></div>
             </div>
 
             <div class="card">
-                <h2>🔍 Detalle de Hallazgos Críticos (No Cumple)</h2>
-                <div class="table-responsive">
-                    {tabla_html}
-                </div>
+                <h2>🔍 Detalle de Hallazgos Críticos</h2>
+                <div class="table-responsive">{tabla_html}</div>
             </div>
         </div>
         <script>
             const spec = {chart_json};
-            vegaEmbed('#vis', spec, {{width: "container", actions: true, theme: 'dark'}});
+            // VegaEmbed renderiza el gráfico con la misma interactividad de Altair
+            vegaEmbed('#vis', spec, {{
+                width: "container",
+                actions: {{export: true, source: false, compiled: false, editor: false}},
+                theme: 'dark'
+            }});
         </script>
     </body>
     </html>
@@ -222,27 +243,20 @@ if df_raw is not None and not df_raw.empty:
 
     # --- BOTÓN DE DESCARGA ---
     st.download_button(
-        label="📥 Descargar Reporte Completo (Gráfica + Tabla Centrada)",
+        label="📥 Descargar Reporte Ejecutivo (KPIs + Gráfica + Tabla)",
         data=reporte_html,
-        file_name=f"Reporte_LPA_{page}.html",
-        mime="text/html",
-        help="Descarga el reporte profesional con tabla y gráfica centrada."
+        file_name=f"Reporte_Elite_LPA_{page}.html",
+        mime="text/html"
     )
 
-    # --- VISUALIZACIÓN DE HALLAZGOS EN LA APP ---
+    # --- VISUALIZACIÓN EN APP ---
     with st.expander("🔍 Ver Hallazgos Críticos (No Cumple)"):
         if not df_fallas.empty:
-            # Mostramos la tabla centrada estéticamente en la app
-            st.dataframe(
-                df_fallas[cols_tabla].style.set_properties(**{'text-align': 'center'}),
-                use_container_width=True
-            )
+            st.dataframe(df_fallas[cols_tabla].style.set_properties(**{'text-align': 'center'}), use_container_width=True)
         else:
-            st.success("✅ No se encontraron hallazgos críticos con los filtros seleccionados.")
+            st.success("✅ Sin hallazgos críticos.")
 
 else:
-    # Este else corresponde al 'if df_raw is not None' inicial
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
-# Pie de página en el sidebar
 st.sidebar.caption('LPA Dashboard v1.0 | Developed by Master Engineer Erik Armenta')
