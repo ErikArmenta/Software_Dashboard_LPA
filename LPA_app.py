@@ -18,7 +18,7 @@ import io
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 1. CONFIGURACIÓN DE LA PÁGINA
-st.set_page_config(page_title="LPA Dashboard Elite", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Analisis LPA Dashboard", page_icon="📊", layout="wide")
 
 # 2. ESTILO DARK PREMIUM
 st.markdown("""
