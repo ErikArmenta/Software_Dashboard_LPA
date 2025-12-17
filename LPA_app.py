@@ -157,13 +157,25 @@ if df_raw is not None and not df_raw.empty:
 
     st.altair_chart(bar_chart, use_container_width=True)
 
-    # --- REPORTE ELITE HTML ---
+
+# --- REPORTE ELITE HTML ---
     chart_json = bar_chart.to_json()
     df_fallas = df_filtered[df_filtered['Estatus'] == 'No Cumple']
 
-    # Limpiamos la tabla para que solo muestre lo importante en el reporte
-    cols_tabla = [c for c in df_fallas.columns if c not in ['Categoria_Raw', 'Estatus_Original']]
-    tabla_html = df_fallas[cols_tabla].to_html(classes='table table-striped', index=False)
+    # Seleccionamos y reordenamos columnas para que la Operación sea visible
+    # Usamos get para evitar errores si alguna columna no existe en ese nivel
+    cols_importantes = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'],
+                        cols_nombres['operacion'], 'Categoría', 'Estatus']
+
+    # Filtrar solo las que realmente están presentes en el DataFrame filtrado
+    cols_tabla = [c for c in cols_importantes if c in df_fallas.columns]
+
+    # Generar el HTML de la tabla con clases de Bootstrap para centrar
+    tabla_html = df_fallas[cols_tabla].to_html(
+        classes='table table-dark table-striped table-hover text-center',
+        index=False,
+        justify='center'
+    )
 
     reporte_html = f"""
     <html>
@@ -173,24 +185,31 @@ if df_raw is not None and not df_raw.empty:
         <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
-            body {{ background-color: #0e1117; color: white; font-family: sans-serif; padding: 30px; }}
-            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 20px; margin-bottom: 20px; }}
-            h2 {{ color: #3b82f6; }}
-            .table {{ color: white; font-size: 0.8rem; }}
+            body {{ background-color: #0e1117; color: white; font-family: 'Inter', sans-serif; padding: 30px; }}
+            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 25px; margin-bottom: 20px; }}
+            h1, h2 {{ color: #3b82f6; text-align: center; font-weight: bold; }}
+            p.header-info {{ text-align: center; color: #94a3b8; margin-bottom: 30px; }}
+            .table {{ color: white; margin-left: auto; margin-right: auto; width: 90% !important; }}
+            .table th {{ background-color: #3b82f6 !important; color: white !important; text-align: center !important; border: none; }}
+            .table td {{ vertical-align: middle; text-align: center !important; border-color: #2d3748; }}
             #vg-tooltip-element {{ background-color: #333 !important; color: white !important; border: 1px solid #3b82f6 !important; }}
         </style>
     </head>
     <body>
         <div class="container-fluid">
-            <h1>🚀 Reporte LPA - {page}</h1>
-            <p>Master Engineer: Erik Armenta | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <h1>🚀 Reporte LPA Elite</h1>
+            <p class="header-info">Nivel: {page} | Master Engineer: Erik Armenta<br>Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+
             <div class="card">
                 <h2>📊 Gráfica de Cumplimiento</h2>
                 <div id="vis" style="width: 100%;"></div>
             </div>
+
             <div class="card">
                 <h2>🔍 Detalle de Hallazgos Críticos (No Cumple)</h2>
-                <div class="table-responsive">{tabla_html}</div>
+                <div class="table-responsive">
+                    {tabla_html}
+                </div>
             </div>
         </div>
         <script>
@@ -201,17 +220,29 @@ if df_raw is not None and not df_raw.empty:
     </html>
     """
 
+    # --- BOTÓN DE DESCARGA ---
     st.download_button(
-        label="📥 Descargar Reporte Completo (Gráfica + Tabla)",
+        label="📥 Descargar Reporte Completo (Gráfica + Tabla Centrada)",
         data=reporte_html,
-        file_name=f"Reporte_Elite_LPA_{page}.html",
-        mime="text/html"
+        file_name=f"Reporte_LPA_{page}.html",
+        mime="text/html",
+        help="Descarga el reporte profesional con tabla y gráfica centrada."
     )
 
+    # --- VISUALIZACIÓN DE HALLAZGOS EN LA APP ---
     with st.expander("🔍 Ver Hallazgos Críticos (No Cumple)"):
-        st.dataframe(df_fallas[cols_tabla], use_container_width=True)
+        if not df_fallas.empty:
+            # Mostramos la tabla centrada estéticamente en la app
+            st.dataframe(
+                df_fallas[cols_tabla].style.set_properties(**{'text-align': 'center'}),
+                use_container_width=True
+            )
+        else:
+            st.success("✅ No se encontraron hallazgos críticos con los filtros seleccionados.")
 
 else:
+    # Este else corresponde al 'if df_raw is not None' inicial
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
+# Pie de página en el sidebar
 st.sidebar.caption('LPA Dashboard v1.0 | Developed by Master Engineer Erik Armenta')
