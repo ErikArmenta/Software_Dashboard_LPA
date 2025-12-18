@@ -5,6 +5,7 @@ Created on Wed Dec 17 09:13:36 2025
 @author: acer
 """
 
+
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -12,7 +13,7 @@ import requests
 from io import StringIO
 import urllib3
 from datetime import datetime
-import io
+import json
 
 # Deshabilitar advertencias de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -64,7 +65,6 @@ def load_data(url):
 def get_melted_data(df):
     res_cols = [col for col in df.columns if 'Res' in col and '_C' in col]
 
-    # Detección flexible de columnas (Agregamos Operación)
     col_auditor = next((c for c in df.columns if 'Auditor' in c), "Auditor")
     col_maquina = next((c for c in df.columns if any(x in c for x in ['Maquina', 'Célula', 'Celula'])), "Maquina")
     col_operacion = next((c for c in df.columns if 'Operación' in c or 'Operacion' in c), "Operacion")
@@ -94,8 +94,16 @@ def get_melted_data(df):
     return df_melted, cols_dict
 
 # 5. UI NAVEGACIÓN
-st.sidebar.image("EA_2.png", width=100)
+try:
+    st.sidebar.image("EA_2.png", width=100)
+except:
+    pass
 st.sidebar.title("📊 Control LPA Pro")
+
+if st.sidebar.button("🔄 Sincronizar Datos"):
+    st.cache_data.clear()
+    st.rerun()
+
 page = st.sidebar.radio("Nivel:", ["LPA 1er Nivel", "LPA 2do Nivel"])
 current_url = URL_1ER_NIVEL if page == "LPA 1er Nivel" else URL_2DO_NIVEL
 df_raw = load_data(current_url)
@@ -105,21 +113,13 @@ if df_raw is not None and not df_raw.empty:
 
     st.title(f"🚀 {page}")
 
-    # --- FILTROS EN BARRA LATERAL ---
+    # --- FILTROS ---
     st.sidebar.divider()
     st.sidebar.subheader("Filtros Maestros")
+    f_auditor = st.sidebar.multiselect("Auditor:", sorted(df_raw[cols_nombres['auditor']].unique()))
+    f_area = st.sidebar.multiselect("Área:", sorted(df_raw[cols_nombres['area']].unique())) if cols_nombres['area'] in df_raw.columns else []
+    f_maquina = st.sidebar.multiselect("Máquina/Célula:", sorted(df_raw[cols_nombres['maquina']].unique())) if cols_nombres['maquina'] in df_raw.columns else []
 
-    f_auditor = st.sidebar.multiselect("Auditor:", df_raw[cols_nombres['auditor']].unique())
-
-    if cols_nombres['area'] in df_raw.columns:
-        f_area = st.sidebar.multiselect("Área:", df_raw[cols_nombres['area']].unique())
-    else: f_area = []
-
-    if cols_nombres['maquina'] in df_raw.columns:
-        f_maquina = st.sidebar.multiselect("Máquina/Célula:", df_raw[cols_nombres['maquina']].unique())
-    else: f_maquina = []
-
-    # Aplicación de filtros
     df_filtered = df_melted.copy()
     if f_auditor: df_filtered = df_filtered[df_filtered[cols_nombres['auditor']].isin(f_auditor)]
     if f_area: df_filtered = df_filtered[df_filtered[cols_nombres['area']].isin(f_area)]
@@ -132,7 +132,7 @@ if df_raw is not None and not df_raw.empty:
     c2.metric("Auditorías Registradas", len(df_raw))
     c3.metric("Puntos Evaluados", len(df_filtered))
 
-    # --- GRÁFICO APILADO ---
+    # --- GRÁFICO 1: CUMPLIMIENTO (CON TU LÓGICA DE HOVERS) ---
     st.subheader("Análisis de Cumplimiento por Categoría")
 
     tooltips_list = [
@@ -141,8 +141,6 @@ if df_raw is not None and not df_raw.empty:
         alt.Tooltip(f"{cols_nombres['auditor']}:N", title='Auditor'),
         alt.Tooltip('Estatus:N', title='Resultado')
     ]
-
-    # Agregar Operación al Hover si existe
     keys_to_hover = ['maquina', 'operacion', 'turno', 'supervisor', 'ingeniero']
     for key in keys_to_hover:
         if cols_nombres[key] in df_filtered.columns:
@@ -153,26 +151,49 @@ if df_raw is not None and not df_raw.empty:
         y=alt.Y('count():Q', title='Cantidad'),
         color=alt.Color('Estatus:N', scale=alt.Scale(domain=['Cumple', 'No Cumple'], range=['#22c55e', '#ef4444'])),
         tooltip=tooltips_list
-    ).properties(width='container', height=500).interactive()
-
+    ).properties(height=450).interactive()
     st.altair_chart(bar_chart, use_container_width=True)
 
+    # --- GRÁFICA 2: TENDENCIA (CORRECCIÓN ERROR JSON) ---
+    st.subheader("📈 Tendencia de Cumplimiento")
+    df_trend = df_filtered.copy()
+    df_trend['Fecha_Label'] = df_trend['Marca temporal'].dt.strftime('%Y-%m-%d')
+    trend_data = df_trend.groupby('Fecha_Label')['Estatus'].apply(lambda x: (x == 'Cumple').mean() * 100).reset_index()
 
-# --- REPORTE ELITE HTML ---
-    chart_json = bar_chart.to_json()
+    line_chart = alt.Chart(trend_data).mark_line(point=True, color='#3b82f6').encode(
+        x=alt.X('Fecha_Label:T', title='Fecha'),
+        y=alt.Y('Estatus:Q', title='% Cumplimiento', scale=alt.Scale(domain=[0, 105])),
+        tooltip=[alt.Tooltip('Fecha_Label:T', title='Fecha'), alt.Tooltip('Estatus:Q', format='.1f', title='% Cumplimiento')]
+    ).properties(height=300).interactive()
+    st.altair_chart(line_chart, use_container_width=True)
+
+    # --- GRÁFICA 3: PARETO ---
+    st.subheader("⚠️ Top Máquinas con Hallazgos")
     df_fallas = df_filtered[df_filtered['Estatus'] == 'No Cumple']
+    df_pareto = df_fallas[cols_nombres['maquina']].value_counts().reset_index()
+    df_pareto.columns = ['Máquina', 'Conteo']
 
-    # Columnas para la tabla centrada
-    cols_importantes = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'],
-                        cols_nombres['operacion'], 'Categoría', 'Estatus']
-    cols_tabla = [c for c in cols_importantes if c in df_fallas.columns]
+    pareto_chart = alt.Chart(df_pareto).mark_bar(color='#ef4444').encode(
+        x=alt.X('Conteo:Q', title='Fallas'),
+        y=alt.Y('Máquina:N', sort='-x', title='Máquina'),
+        tooltip=['Máquina', 'Conteo']
+    ).properties(height=300).interactive()
+    st.altair_chart(pareto_chart, use_container_width=True)
 
-    tabla_html = df_fallas[cols_tabla].to_html(
-        classes='table table-dark table-striped table-hover text-center',
-        index=False, justify='center'
-    )
+    # --- PREPARACIÓN DE JSONS PARA REPORTE ---
+    chart1_json = bar_chart.to_json()
+    chart2_json = line_chart.to_json()
+    chart3_json = pareto_chart.to_json()
 
-    # REPORTE CON KPIs Y GRÁFICO INTERACTIVO
+# --- PREPARACIÓN DE REPORTE HTML ---
+    chart1_json = bar_chart.properties(width='container').to_json()
+    chart2_json = line_chart.properties(width='container').to_json()
+    chart3_json = pareto_chart.properties(width='container').to_json()
+
+    cols_tabla_imp = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'], cols_nombres['operacion'], 'Categoría']
+    cols_tabla = [c for c in cols_tabla_imp if c in df_fallas.columns]
+    tabla_html = df_fallas[cols_tabla].to_html(classes='table table-dark table-striped text-center', index=False, justify='center')
+
     reporte_html = f"""
     <html>
     <head>
@@ -182,68 +203,61 @@ if df_raw is not None and not df_raw.empty:
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             body {{ background-color: #0e1117; color: white; font-family: 'Inter', sans-serif; padding: 30px; }}
-            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 20px; margin-bottom: 20px; text-align: center; }}
+            .card {{ background-color: #1c212d; border: 1px solid #3b82f6; border-radius: 15px; padding: 25px; margin-bottom: 25px; text-align: center; width: 100%; }}
             .kpi-card {{ border-left: 5px solid #3b82f6; }}
-            .kpi-value {{ font-size: 2rem; font-weight: bold; color: #3b82f6; }}
-            .kpi-label {{ font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; }}
+            .kpi-value {{ font-size: 2.5rem; font-weight: bold; color: #3b82f6; }}
+            .kpi-label {{ font-size: 1rem; color: #94a3b8; text-transform: uppercase; }}
             h1, h2 {{ color: #3b82f6; text-align: center; font-weight: bold; margin-bottom: 20px; }}
-            .table {{ color: white; margin: 0 auto; width: 95% !important; }}
+            .table {{ color: white; margin: 0 auto; width: 100% !important; }}
             .table th {{ background-color: #3b82f6 !important; color: white !important; text-align: center !important; }}
-            #vg-tooltip-element {{ background-color: #333 !important; color: white !important; border: 1px solid #3b82f6 !important; font-size: 12px !important; }}
+            #vg-tooltip-element {{
+                background-color: #1c212d !important;
+                color: white !important;
+                border: 1px solid #3b82f6 !important;
+                font-size: 14px !important;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            }}
+            .chart-frame {{ width: 100%; min-height: 450px; }}
         </style>
     </head>
     <body>
         <div class="container-fluid">
-            <h1>🚀 Reporte Gerencial LPA</h1>
+            <h1>🚀 Reporte Gerencial LPA Elite</h1>
             <p style="text-align: center; color: #94a3b8;">Nivel: {page} | Developed by Master Engineer Erik Armenta | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
 
             <div class="row mb-4">
-                <div class="col-md-4">
-                    <div class="card kpi-card">
-                        <div class="kpi-label">Cumplimiento Global</div>
-                        <div class="kpi-value">{cumplimiento:.1f}%</div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card kpi-card">
-                        <div class="kpi-label">Auditorías Totales</div>
-                        <div class="kpi-value">{len(df_raw)}</div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card kpi-card">
-                        <div class="kpi-label">Puntos Evaluados</div>
-                        <div class="kpi-value">{len(df_filtered)}</div>
-                    </div>
-                </div>
+                <div class="col-md-4"><div class="card kpi-card"><div class="kpi-label">Cumplimiento</div><div class="kpi-value">{cumplimiento:.1f}%</div></div></div>
+                <div class="col-md-4"><div class="card kpi-card"><div class="kpi-label">Auditorías</div><div class="kpi-value">{len(df_raw)}</div></div></div>
+                <div class="col-md-4"><div class="card kpi-card"><div class="kpi-label">Evaluaciones</div><div class="kpi-value">{len(df_filtered)}</div></div></div>
             </div>
 
-            <div class="card">
-                <h2>📊 Análisis de Tendencias</h2>
-                <div id="vis" style="width: 100%;"></div>
-            </div>
+            <div class="card"><h2>📊 Cumplimiento por Categoría</h2><div id="vis1" class="chart-frame"></div></div>
+            <div class="card"><h2>📈 Tendencia de Cumplimiento</h2><div id="vis2" class="chart-frame"></div></div>
+            <div class="card"><h2>⚠️ Top Máquinas con Hallazgos</h2><div id="vis3" class="chart-frame"></div></div>
 
             <div class="card">
                 <h2>🔍 Detalle de Hallazgos Críticos</h2>
                 <div class="table-responsive">{tabla_html}</div>
             </div>
+
+            <footer style="text-align: center; margin-top: 50px;">
+                <p style="color: #3b82f6; font-weight: bold; font-size: 1.2rem;">Developed by Master Engineer Erik Armenta</p>
+            </footer>
         </div>
         <script>
-            const spec = {chart_json};
-            // VegaEmbed renderiza el gráfico con la misma interactividad de Altair
-            vegaEmbed('#vis', spec, {{
-                width: "container",
-                actions: {{export: true, source: false, compiled: false, editor: false}},
-                theme: 'dark'
-            }});
+            const opt = {{ actions: {{export: true, source: false, compiled: false, editor: false}}, theme: 'dark', width: 'container' }};
+            vegaEmbed('#vis1', {chart1_json}, opt);
+            vegaEmbed('#vis2', {chart2_json}, opt);
+            vegaEmbed('#vis3', {chart3_json}, opt);
         </script>
     </body>
     </html>
     """
 
     # --- BOTÓN DE DESCARGA ---
-    st.download_button(
-        label="📥 Descargar Reporte Ejecutivo (KPIs + Gráfica + Tabla)",
+    st.sidebar.divider()
+    st.sidebar.download_button(
+        label="📥 Descargar Reporte Elite",
         data=reporte_html,
         file_name=f"Reporte_Elite_LPA_{page}.html",
         mime="text/html"
@@ -259,7 +273,7 @@ if df_raw is not None and not df_raw.empty:
 else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
-st.sidebar.caption('LPA Dashboard v1.0 | Developed by Master Engineer Erik Armenta')
+st.sidebar.caption('LPA Dashboard v1.1 | Developed by Master Engineer Erik Armenta')
 
 
 
