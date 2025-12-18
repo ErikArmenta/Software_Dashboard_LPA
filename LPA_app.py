@@ -43,9 +43,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. CARGA DE DATOS
-URL_1ER_NIVEL = "https://docs.google.com/spreadsheets/d/1WkjryZMzC5bVq9KGhJJEXD-8q16T3gcrNpZdiH8gXZM/export?format=csv&gid=476960048"
-URL_2DO_NIVEL = "https://docs.google.com/spreadsheets/d/1PMQ2nRJOxZGi8Zco4flwfcLneOs5Vrd79yZELvuLfrw/export?format=csv&gid=433841298"
+# --- ENLACES CSV ACTUALIZADOS ---
+URL_1ER_NIVEL = "https://docs.google.com/spreadsheets/d/17XF1YDLcLIr2adqouvRAJPLx2OeTyMSIDkvaI7PYzR4/export?format=csv&gid=1788164513"
+URL_2DO_NIVEL = "https://docs.google.com/spreadsheets/d/1Kr0YuPRkuyncGcgRYqVvws9I2sijFN9JY-N-SdgCky8/export?format=csv&gid=258486906"
 
 @st.cache_data(ttl=60)
 def load_data(url):
@@ -260,3 +260,4 @@ else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
 st.sidebar.caption('LPA Dashboard v1.0 | Developed by Master Engineer Erik Armenta')
+
