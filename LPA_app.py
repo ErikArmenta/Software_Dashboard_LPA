@@ -43,7 +43,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENLACES CSV ACTUALIZADOS ---
+# --- ENLACES CSV TRANSFORMADOS ---
 URL_1ER_NIVEL = "https://docs.google.com/spreadsheets/d/1V_DhqlKEgH13v9SLDfmPJBwXe9pwX_modSxeg7b52gQ/export?format=csv&gid=12953958"
 URL_2DO_NIVEL = "https://docs.google.com/spreadsheets/d/13YqXoVENbDHNXM6Eq4ZlOOsvRXNO5gnY82gu1hUKa7k/export?format=csv&gid=1005755816"
 
@@ -260,5 +260,6 @@ else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
 st.sidebar.caption('LPA Dashboard v1.0 | Developed by Master Engineer Erik Armenta')
+
 
 
