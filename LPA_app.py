@@ -206,6 +206,15 @@ if df_raw is not None and not df_raw.empty:
     cols_tabla = [c for c in cols_tabla_imp if c in df_fallas.columns]
     tabla_html = df_fallas[cols_tabla].to_html(classes='table table-dark table-striped text-center', index=False, justify='center')
 
+    # --- PREPARACIÓN DE REPORTE HTML ---
+    chart1_json = bar_chart.properties(width='container').to_json()
+    chart2_json = line_chart.properties(width='container').to_json()
+    chart3_json = pareto_chart.properties(width='container').to_json()
+
+    cols_tabla_imp = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'], cols_nombres['operacion'], 'Categoría']
+    cols_tabla = [c for c in cols_tabla_imp if c in df_fallas.columns]
+    tabla_html = df_fallas[cols_tabla].to_html(classes='table table-dark table-striped text-center', index=False, justify='center')
+
     reporte_html = f"""
     <html>
     <head>
@@ -234,7 +243,7 @@ if df_raw is not None and not df_raw.empty:
     </head>
     <body>
         <div class="container-fluid">
-            <h1>🚀 Reporte Gerencial LPA Elite</h1>
+            <h1>🚀 Reporte Gerencial LPA</h1>
             <p style="text-align: center; color: #94a3b8;">Nivel: {page} | Developed by Master Engineer Erik Armenta | {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
 
             <div class="row mb-4">
@@ -269,9 +278,9 @@ if df_raw is not None and not df_raw.empty:
     # --- BOTÓN DE DESCARGA ---
     st.sidebar.divider()
     st.sidebar.download_button(
-        label="📥 Descargar Reporte Elite",
+        label="📥 Descargar Reporte Gerencial",
         data=reporte_html,
-        file_name=f"Reporte_Elite_LPA_{page}.html",
+        file_name=f"Reporte_LPA_{page}.html",
         mime="text/html"
     )
 
@@ -286,6 +295,7 @@ else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
 st.sidebar.caption('LPA Dashboard v1.1 | Developed by Master Engineer Erik Armenta')
+
 
 
 
