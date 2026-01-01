@@ -132,7 +132,7 @@ if df_raw is not None and not df_raw.empty:
     c2.metric("Auditorías Registradas", len(df_raw))
     c3.metric("Puntos Evaluados", len(df_filtered))
 
-    # --- GRÁFICO 1: CUMPLIMIENTO (CON TU LÓGICA DE HOVERS) ---
+# --- GRÁFICO 1: CUMPLIMIENTO (BARRAS ESTILIZADAS) ---
     st.subheader("Análisis de Cumplimiento por Categoría")
 
     tooltips_list = [
@@ -141,17 +141,29 @@ if df_raw is not None and not df_raw.empty:
         alt.Tooltip(f"{cols_nombres['auditor']}:N", title='Auditor'),
         alt.Tooltip('Estatus:N', title='Resultado')
     ]
+
     keys_to_hover = ['maquina', 'operacion', 'turno', 'supervisor', 'ingeniero']
     for key in keys_to_hover:
         if cols_nombres[key] in df_filtered.columns:
+            # Usamos :N para asegurar que Altair lo trate como texto (Nominal)
             tooltips_list.append(alt.Tooltip(f"{cols_nombres[key]}:N", title=key.capitalize()))
 
-    bar_chart = alt.Chart(df_filtered).mark_bar().encode(
-        x=alt.X('Categoría:N', sort=alt.EncodingSortField(field="Categoría", op="count", order='ascending')),
+    bar_chart = alt.Chart(df_filtered).mark_bar(
+        size=40,           # <--- AQUÍ controlas el grosor fijo (ajusta este número a tu gusto)
+        cornerRadiusTopLeft=2,
+        cornerRadiusTopRight=2
+    ).encode(
+        x=alt.X('Categoría:N',
+                sort=alt.EncodingSortField(field="Categoría", op="count", order='ascending'),
+                scale=alt.Scale(paddingInner=0.1) # Esto también ayuda a dar aire entre barras
+        ),
         y=alt.Y('count():Q', title='Cantidad'),
-        color=alt.Color('Estatus:N', scale=alt.Scale(domain=['Cumple', 'No Cumple'], range=['#22c55e', '#ef4444'])),
+        color=alt.Color('Estatus:N',
+                        scale=alt.Scale(domain=['Cumple', 'No Cumple'],
+                                       range=['#22c55e', '#ef4444'])),
         tooltip=tooltips_list
     ).properties(height=450).interactive()
+
     st.altair_chart(bar_chart, use_container_width=True)
 
     # --- GRÁFICA 2: TENDENCIA (CORRECCIÓN ERROR JSON) ---
@@ -274,6 +286,7 @@ else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
 st.sidebar.caption('LPA Dashboard v1.1 | Developed by Master Engineer Erik Armenta')
+
 
 
 
