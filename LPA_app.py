@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Dec 17 09:13:36 2025
-
-@author: acer
-"""
-
-
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -61,9 +53,14 @@ def load_data(url):
         return None
     except: return None
 
-# 4. LÓGICA DE PROCESAMIENTO
+# 4. LÓGICA DE PROCESAMIENTO ACTUALIZADA PARA TRAZABILIDAD IATF
 def get_melted_data(df):
+    # Identificar columnas de resultados (Cumple/No Cumple)
     res_cols = [col for col in df.columns if 'Res' in col and '_C' in col]
+
+    # --- NUEVA LÓGICA: Identificar columnas de información técnica (Info_, ID_, Espec_, etc.) ---
+    extra_info_cols = [c for c in df.columns if any(pref in c for pref in
+                      ['Info_', 'ID_', 'Valores_', 'Espec_', 'Fecha_', 'Escribir', 'Valor_'])]
 
     col_auditor = next((c for c in df.columns if 'Auditor' in c), "Auditor")
     col_maquina = next((c for c in df.columns if any(x in c for x in ['Maquina', 'Célula', 'Celula'])), "Maquina")
@@ -75,10 +72,12 @@ def get_melted_data(df):
 
     cols_dict = {
         'auditor': col_auditor, 'maquina': col_maquina, 'operacion': col_operacion,
-        'area': col_area, 'turno': col_turno, 'supervisor': col_supervisor, 'ingeniero': col_ingeniero
+        'area': col_area, 'turno': col_turno, 'supervisor': col_supervisor, 'ingeniero': col_ingeniero,
+        'extra_info': extra_info_cols # Guardamos las columnas nuevas aquí
     }
 
-    meta_cols = [col_auditor, col_maquina, col_operacion, col_area, col_turno, col_supervisor, col_ingeniero, 'Marca temporal']
+    # Agregamos las columnas extra a meta_cols para que no se pierdan al hacer el melt
+    meta_cols = [col_auditor, col_maquina, col_operacion, col_area, col_turno, col_supervisor, col_ingeniero, 'Marca temporal'] + extra_info_cols
     existing_meta = [c for c in meta_cols if c in df.columns]
 
     if not res_cols: return None, cols_dict
@@ -98,7 +97,7 @@ try:
     st.sidebar.image("EA_2.png", width=100)
 except:
     pass
-st.sidebar.title("📊 Control LPA Pro")
+st.sidebar.title("📊 Control LPA")
 
 if st.sidebar.button("🔄 Sincronizar Datos"):
     st.cache_data.clear()
@@ -132,46 +131,31 @@ if df_raw is not None and not df_raw.empty:
     c2.metric("Auditorías Registradas", len(df_raw))
     c3.metric("Puntos Evaluados", len(df_filtered))
 
-# --- GRÁFICO 1: CUMPLIMIENTO (BARRAS ESTILIZADAS) ---
+    # --- GRÁFICO 1: CUMPLIMIENTO ---
     st.subheader("Análisis de Cumplimiento por Categoría")
-
     tooltips_list = [
         alt.Tooltip('Categoría:N', title='Tópico'),
         alt.Tooltip('Marca temporal:T', title='Fecha', format='%d/%m/%Y'),
         alt.Tooltip(f"{cols_nombres['auditor']}:N", title='Auditor'),
         alt.Tooltip('Estatus:N', title='Resultado')
     ]
+    # Agregar las nuevas columnas de info al tooltip dinámicamente
+    for info_col in cols_nombres['extra_info']:
+        tooltips_list.append(alt.Tooltip(f"{info_col}:N", title=info_col))
 
-    keys_to_hover = ['maquina', 'operacion', 'turno', 'supervisor', 'ingeniero']
-    for key in keys_to_hover:
-        if cols_nombres[key] in df_filtered.columns:
-            # Usamos :N para asegurar que Altair lo trate como texto (Nominal)
-            tooltips_list.append(alt.Tooltip(f"{cols_nombres[key]}:N", title=key.capitalize()))
-
-    bar_chart = alt.Chart(df_filtered).mark_bar(
-        size=40,           # <--- AQUÍ controlas el grosor fijo (ajusta este número a tu gusto)
-        cornerRadiusTopLeft=2,
-        cornerRadiusTopRight=2
-    ).encode(
-        x=alt.X('Categoría:N',
-                sort=alt.EncodingSortField(field="Categoría", op="count", order='ascending'),
-                scale=alt.Scale(paddingInner=0.1) # Esto también ayuda a dar aire entre barras
-        ),
+    bar_chart = alt.Chart(df_filtered).mark_bar(size=40, cornerRadiusTopLeft=2, cornerRadiusTopRight=2).encode(
+        x=alt.X('Categoría:N', sort=alt.EncodingSortField(field="Categoría", op="count", order='ascending')),
         y=alt.Y('count():Q', title='Cantidad'),
-        color=alt.Color('Estatus:N',
-                        scale=alt.Scale(domain=['Cumple', 'No Cumple'],
-                                       range=['#22c55e', '#ef4444'])),
+        color=alt.Color('Estatus:N', scale=alt.Scale(domain=['Cumple', 'No Cumple'], range=['#22c55e', '#ef4444'])),
         tooltip=tooltips_list
     ).properties(height=450).interactive()
-
     st.altair_chart(bar_chart, use_container_width=True)
 
-    # --- GRÁFICA 2: TENDENCIA (CORRECCIÓN ERROR JSON) ---
+    # --- GRÁFICA 2: TENDENCIA ---
     st.subheader("📈 Tendencia de Cumplimiento")
     df_trend = df_filtered.copy()
     df_trend['Fecha_Label'] = df_trend['Marca temporal'].dt.strftime('%Y-%m-%d')
     trend_data = df_trend.groupby('Fecha_Label')['Estatus'].apply(lambda x: (x == 'Cumple').mean() * 100).reset_index()
-
     line_chart = alt.Chart(trend_data).mark_line(point=True, color='#3b82f6').encode(
         x=alt.X('Fecha_Label:T', title='Fecha'),
         y=alt.Y('Estatus:Q', title='% Cumplimiento', scale=alt.Scale(domain=[0, 105])),
@@ -184,7 +168,6 @@ if df_raw is not None and not df_raw.empty:
     df_fallas = df_filtered[df_filtered['Estatus'] == 'No Cumple']
     df_pareto = df_fallas[cols_nombres['maquina']].value_counts().reset_index()
     df_pareto.columns = ['Máquina', 'Conteo']
-
     pareto_chart = alt.Chart(df_pareto).mark_bar(color='#ef4444').encode(
         x=alt.X('Conteo:Q', title='Fallas'),
         y=alt.Y('Máquina:N', sort='-x', title='Máquina'),
@@ -192,27 +175,16 @@ if df_raw is not None and not df_raw.empty:
     ).properties(height=300).interactive()
     st.altair_chart(pareto_chart, use_container_width=True)
 
-    # --- PREPARACIÓN DE JSONS PARA REPORTE ---
-    chart1_json = bar_chart.to_json()
-    chart2_json = line_chart.to_json()
-    chart3_json = pareto_chart.to_json()
-
-# --- PREPARACIÓN DE REPORTE HTML ---
+    # --- REPORTE HTML ACTUALIZADO CON INFO TÉCNICA ---
     chart1_json = bar_chart.properties(width='container').to_json()
     chart2_json = line_chart.properties(width='container').to_json()
     chart3_json = pareto_chart.properties(width='container').to_json()
 
-    cols_tabla_imp = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'], cols_nombres['operacion'], 'Categoría']
+    # Definimos qué columnas mostrar en la tabla de hallazgos (Incluimos las nuevas IDs)
+    cols_tabla_imp = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'], 'Categoría'] + cols_nombres['extra_info']
     cols_tabla = [c for c in cols_tabla_imp if c in df_fallas.columns]
-    tabla_html = df_fallas[cols_tabla].to_html(classes='table table-dark table-striped text-center', index=False, justify='center')
 
-    # --- PREPARACIÓN DE REPORTE HTML ---
-    chart1_json = bar_chart.properties(width='container').to_json()
-    chart2_json = line_chart.properties(width='container').to_json()
-    chart3_json = pareto_chart.properties(width='container').to_json()
-
-    cols_tabla_imp = ['Marca temporal', cols_nombres['auditor'], cols_nombres['maquina'], cols_nombres['operacion'], 'Categoría']
-    cols_tabla = [c for c in cols_tabla_imp if c in df_fallas.columns]
+    # Estilizamos la tabla para que sea scrolleable si hay muchas columnas
     tabla_html = df_fallas[cols_tabla].to_html(classes='table table-dark table-striped text-center', index=False, justify='center')
 
     reporte_html = f"""
@@ -229,15 +201,9 @@ if df_raw is not None and not df_raw.empty:
             .kpi-value {{ font-size: 2.5rem; font-weight: bold; color: #3b82f6; }}
             .kpi-label {{ font-size: 1rem; color: #94a3b8; text-transform: uppercase; }}
             h1, h2 {{ color: #3b82f6; text-align: center; font-weight: bold; margin-bottom: 20px; }}
-            .table {{ color: white; margin: 0 auto; width: 100% !important; }}
+            .table-responsive {{ border-radius: 10px; overflow: hidden; }}
+            .table {{ color: white; margin: 0 auto; width: 100% !important; font-size: 0.9rem; }}
             .table th {{ background-color: #3b82f6 !important; color: white !important; text-align: center !important; }}
-            #vg-tooltip-element {{
-                background-color: #1c212d !important;
-                color: white !important;
-                border: 1px solid #3b82f6 !important;
-                font-size: 14px !important;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            }}
             .chart-frame {{ width: 100%; min-height: 450px; }}
         </style>
     </head>
@@ -257,7 +223,7 @@ if df_raw is not None and not df_raw.empty:
             <div class="card"><h2>⚠️ Top Máquinas con Hallazgos</h2><div id="vis3" class="chart-frame"></div></div>
 
             <div class="card">
-                <h2>🔍 Detalle de Hallazgos Críticos</h2>
+                <h2>🔍 Detalle de Hallazgos y Trazabilidad (IDs)</h2>
                 <div class="table-responsive">{tabla_html}</div>
             </div>
 
@@ -285,7 +251,7 @@ if df_raw is not None and not df_raw.empty:
     )
 
     # --- VISUALIZACIÓN EN APP ---
-    with st.expander("🔍 Ver Hallazgos Críticos (No Cumple)"):
+    with st.expander("🔍 Ver Hallazgos Críticos y Trazabilidad"):
         if not df_fallas.empty:
             st.dataframe(df_fallas[cols_tabla].style.set_properties(**{'text-align': 'center'}), use_container_width=True)
         else:
@@ -294,7 +260,7 @@ if df_raw is not None and not df_raw.empty:
 else:
     st.info("🔥 Dashboard listo. Esperando registros de Google Forms...")
 
-st.sidebar.caption('LPA Dashboard v1.1 | Developed by Master Engineer Erik Armenta')
+st.sidebar.caption('LPA Dashboard v1.2 | Developed by Master Engineer Erik Armenta')
 
 
 
